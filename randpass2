@@ -1,0 +1,188 @@
+#!/usr/bin/php
+<?php
+/*
+	Copyright 2024 Philip P. Ide
+    This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License along with this program. If not, see
+    <https://www.gnu.org/licenses/>.
+*/
+
+define( "VER", "1.0.1" );
+
+$parse = array( "len" => 64, "help" => false, "grid" => false, "quiet" => false,
+				"limit" => false, "echo" => false, "porig" => false, "sphere" => 0 );
+
+$origin = "1!2\"34\$5%6^7&8*9(0)-_=+qQwWeErRtTyYuUiIoOpP[{]}aAsSdDfFgGhHjJkKlL;:'@#~zZxXcCvVbBnNmM,<.>/?`|";
+
+function cmdParameters(){
+	global $argc, $argv, $parse;
+	for( $a = 1; $a < $argc; $a++ ){
+
+		$token = strtolower($argv[$a]);
+		if( substr( $token, 0, 1 ) == "-" ){
+			if( strpos($token, "e") ) $parse["echo"] = true;
+			if( strpos($token, "g") ) $parse["grid"] = true;
+			if( strpos($token, "h") ) $parse["help"] = true;
+			if( strpos($token, "l") ) $parse["limit"] = true;
+			if( strpos($token, "m") ) $parse["sphere"] = 2;
+			if( strpos($token, "p") ) $parse["porig"] = true;
+			if( strpos($token, "q") ) $parse["quiet"] = true;
+			if( strpos($token, "s") ) $parse["sphere"] = 1;
+		}
+		else if( is_numeric($token) ){
+			$parse["len"] = (int)$token;
+		}
+	}
+	if( $parse["help"] ){
+		help();
+		exit(0);
+	}
+}
+
+function version(){
+	return "RandPass v".VER."\n";
+}
+
+function help(){
+	$def = "Creates password using cubic and/or spherical algorithms (default=cubic)";
+	fwrite(STDERR,version()."$def\nOptions:\n".
+		"    <n> = number of characters in password returned\n".
+		"    -c  = cubic algorithm (default)\n".
+		"    -e  = echo password to STDERR (still also goes to STDOUT)\n".
+		"    -g  = print randomly generated grid result is generated from\n".
+		"    -h  = print this help and exit\n".
+		"    -l  = limit output (almost quiet, just version and password)\n".
+		"    -m  = mixed spherical and cubic algorithms\n".
+		"    -p  = print origin and exit\n".
+		"    -q  = quiet mode (only print password)\n".
+		"    -s  = spherical algorithm\n\n".
+		"Options can be strung together, e.g. -gq\n".
+		"    -h overrides everything\n".
+		"    -m overrides -c\n".
+		"    -p overrides everything except -h\n".
+		"    -q overrides -l but not -e\n".
+		"    -s overrides -m and -c\n".
+		"Note that only the password is output to STDOUT, everything else goes to STDERR,\n".
+		"so redirection to a file is safe as only the password is redirected.\n");
+}
+
+function makeLineFromLine( $in ){
+	$out = "";
+	While( strlen($in) > 1 ){
+		$v = random_int(0, strlen( $in )-1 );
+		$byte = substr($in, $v, 1);
+		if( $byte == "�" ){
+			// debug code to catch UTF-8 errors
+			echo "$v = $in\n";
+		}
+		$out .= $byte;
+		$in = str_replace( $byte, "", $in );
+	}
+	return $out;
+}
+
+function printGrid( $box ){
+	foreach( $box as $o ) fwrite(STDERR,"$o\n");
+}
+
+function rFromCube( $cube, $sidelen ){
+	$x = random_int(0, $sidelen-1 );
+	$y = random_int(0, $sidelen-1 );
+	$z = random_int(0, $sidelen-1 );
+
+	return substr( $cube[$z][$y], $x, 1 );
+}
+
+function rFromSphere( $cube, $sidelen ){
+	// corners of grid are ignored!
+	// generate offsets from centre of sphere and then convert to cubic coords
+	$c = floor($sidelen/2);
+	$x = random_int(-$c, $c ) + $c;
+	$y = random_int(-$c, $c ) + $c;
+	$z = random_int(-$c, $c ) + $c;
+
+	return substr( $cube[$z][$y], $x, 1 );
+}
+
+cmdParameters(); // will exit if help requested
+
+$n = strlen($origin);
+
+if( $parse["porig"] ){
+	echo "$n\n";
+	echo "$origin\n";
+	exit(0);
+}
+
+$cube = array();
+
+for( $z = 0; $z < $n; $z++ ){
+	$box = array();
+	for( $a = 0; $a < $n; $a++ ){
+		$box[] = makeLineFromLine( $origin );
+	}
+	$cube[] = $box;
+}
+
+if( $parse["grid"] ){
+	foreach( $cube as $box ){
+		printGrid( $box );
+	}
+}
+
+$len = $parse["len"]; // $len = width, height, depth
+
+$r = "";
+$alt = false;
+$s = false;
+
+if( $parse["sphere"] == 0 ){
+	// cubic
+	$s = false;
+}
+else if( $parse["sphere"] == 1 ){
+	// spherical
+	$s = true;
+}
+
+for( $i = 0; $i < $len; $i++ ){
+	$x = random_int(0, $n-1 );
+	$y = random_int(0, $n-1 );
+	$z = random_int(0, $n-1 );
+
+	//$r .= rFromCube( $cube, $n);
+	rFromSphere( $cube, $n );
+
+
+	if( $parse["sphere"] == 2 ){
+		if( $s ){
+			$r .= rFromSphere( $cube, $n );
+		}
+		else {
+			$r .= rFromCube( $cube, $n);
+		}
+		$s = !$s;
+	}
+	else {
+		$r .= substr( $box[$y], $x, 1 );
+	}
+
+}
+
+if( !$parse["quiet"] ){
+	fwrite(STDERR,version());
+	if( !$parse["limit"] ){
+		$type = "cubic";
+		if( $parse["sphere"] == 2 ) $type = "mixed cubic-spherical";
+		else if( $parse["sphere"] == 1 ) $type = "spherical";
+		fwrite(STDERR, "$n base chars used\n".
+			($n*$n*$n)." randomly organised chars in $type grid ($n*$n*$n)\n".
+			"$len character password generated\n");
+	}
+}
+if( $parse["echo"] ) fwrite(STDERR, "$r\n");
+echo "$r\n";
+?>
